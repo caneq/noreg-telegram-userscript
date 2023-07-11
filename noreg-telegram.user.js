@@ -132,6 +132,26 @@ function updateTgMessageLink(channel, readed){
     updateUnreadedCount(channel)
 }
 
+function syncTgValues() {
+    let exportData = getExportData()
+    let xhr = new XMLHttpRequest()
+//     xhr.open("PUT", "/s/" + channel)
+//     xhr.send()
+//     xhr.onload = () => {
+//         let maxMessage = getLatestPostId(xhr.response)
+//         let title = getTgChannelTitle(xhr.response)
+//         let photo = getTgChannelPhoto(xhr.response)
+//         let lastUpdated = getTgChannelUpdateTime(xhr.response)
+
+//         saveTgState(getTgMaxMessageId(channel), maxMessage)
+//         saveTgState(getTgTitleId(channel), title)
+//         saveTgState(getTgPhotoId(channel), photo)
+//         saveTgState(getTgLastUpdatedId(channel), lastUpdated)
+
+//         updateControls(channel)
+//         }
+}
+
 function updateTgLastReaded(channel, readed) {
     saveTgState(getTgLastReadedId(channel), readed)
     updateTgMessageLink(channel, readed)
@@ -310,6 +330,21 @@ function addTgControl(channel, readed) {
     channelLineGroupElement.append(deleteButton)
 }
 
+function getExportData(){
+    return reverse(btoa(reverse(getSavedTgsWithLastReaded().map(x => x[0] + '/' + x[1]).reduce((a, b) => a + '|' + b))))
+}
+
+function decodeExportData(exportData) {
+    return reverse(atob(reverse(exportData)))
+}
+
+function updateLastViewedFromDecodedExportData(decodedExportData){
+    decodedExportData.split("|").forEach(x => {
+          let splitted = x.split("/")
+          updateTgLastReaded(splitted[0], splitted[1])
+      })
+}
+
 function addButtonsControls() {
     let footerElement = document.getElementsByClassName("tgme_channel_info")[0]
 
@@ -320,8 +355,7 @@ function addButtonsControls() {
     let exportButtonElement = document.createElement("button")
     exportButtonElement.innerText = "📋export"
     exportButtonElement.onclick = async () => {
-      let exportData = reverse(btoa(reverse(getSavedTgsWithLastReaded().map(x => x[0] + '/' + x[1]).reduce((a, b) => a + '|' + b))));
-      await navigator.clipboard.writeText(exportData);
+      await navigator.clipboard.writeText(getExportData());
     }
     buttonsGroup.appendChild(exportButtonElement)
 
@@ -329,11 +363,8 @@ function addButtonsControls() {
     importButtonElement.innerText = "📋import"
     importButtonElement.onclick = async () => {
       let dataEncoded = await navigator.clipboard.readText();
-      let data = reverse(atob(reverse(dataEncoded)))
-      data.split("|").forEach(x => {
-          let splitted = x.split("/")
-          updateTgLastReaded(splitted[0], splitted[1])
-      })
+      let data = decodeExportData(dataEncoded)
+      updateLastViewedFromDecodedExportData(data)
     }
     buttonsGroup.appendChild(importButtonElement)
 
