@@ -1,0 +1,368 @@
+// ==UserScript==
+// @name         No reg Telegram
+// @namespace    http://tampermonkey.net/
+// @version      1.0
+// @description  Store channel views in localstorage
+// @author       You
+// @match        https://t.me/s/*
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=t.me
+// @grant        none
+// @downloadURL  https://github.com/caneq/noreg-telegram-userscript/raw/main/noreg-telegram.user.js
+// @updateURL    https://github.com/caneq/noreg-telegram-userscript/raw/main/noreg-telegram.user.js
+// ==/UserScript==
+
+function addStyles() {
+    const style = document.createElement('style');
+    style.innerHTML = `
+#tg_buttons_group {
+ margin-bottom: 10px;
+}
+
+#tg_buttons_group button {
+ margin-right: 10px;
+}
+
+#tg_controls_group {
+ margin-bottom: 20px;
+}
+
+[id$="_channel_group"] {
+ white-space: nowrap;
+}
+
+[id$="_unreaded_count"] {
+ display:inline-block;
+ min-width: 1.5em;
+ font-weight: bold;
+}
+
+[id$="_title"] {
+ text-overflow: ellipsis;
+ display:inline-block;
+ overflow: hidden;
+ width: calc(70%);
+}
+`
+    document.head.appendChild(style);
+}
+
+function getTgLastReadedId(channel) {
+    return channel + "_last_readed"
+}
+
+function getTgLastUpdatedId(channel) {
+    return channel + "_last_updated"
+}
+
+function getControlsGroupId() {
+    return "tg_controls_group"
+}
+
+function getTgButtonsGroupId() {
+    return "tg_buttons_group"
+}
+
+function getTgChannelGroupId(channel) {
+    return channel + "_channel_group"
+}
+
+function getTgTitleId(channel) {
+    return channel + "_title"
+}
+
+function getTgUnreadedCountId(channel){
+    return channel + "_unreaded_count"
+}
+
+function getTgPhotoId(channel) {
+    return channel + "_photo"
+}
+
+function getTgMaxMessageId(channel) {
+    return channel + "_max_message_id"
+}
+
+function getTgControlLink(channel, readed) {
+    return "/s/" + channel + "/" + readed
+}
+
+function getTgControlText(channel) {
+    let savedName = getTgState(getTgTitleId(channel))
+    return savedName || channel
+}
+
+function reverse(s){
+    return s.split("").reverse().join("");
+}
+
+function trimRight(s, trim) {
+    if(s.endsWith(trim)) {
+        return s.slice(0, s.length - trim.length)
+    }
+    else{
+        return s
+    }
+}
+
+function encryptKey(channel) {
+  return reverse("tg" + channel)
+}
+
+function key2channel(key) {
+  return reverse(key).slice(2)
+}
+
+function saveTgState(key, value) {
+  localStorage.setItem(encryptKey(key), value)
+}
+
+function getTgState(key) {
+  return localStorage.getItem(encryptKey(key))
+}
+
+function updateTgMessageLink(channel, readed){
+    let controlElement = document.getElementById(getTgTitleId(channel))
+    if (controlElement) {
+        controlElement.href = getTgControlLink(channel, readed)
+    }
+    else {
+        addTgControl(channel, readed)
+    }
+
+    updateUnreadedCount(channel)
+}
+
+function updateTgLastReaded(channel, readed) {
+    saveTgState(getTgLastReadedId(channel), readed)
+    updateTgMessageLink(channel, readed)
+}
+
+function deleteTgState(channel) {
+    localStorage.removeItem(encryptKey(channel))
+}
+
+function getSavedTgsWithLastReaded() {
+  return Object.entries(localStorage).map(channelState => {
+    channelState[0] = key2channel(channelState[0])
+    return channelState
+  })
+      .filter(x => x[0].endsWith("_last_readed"))
+      .map(x => {
+          x[0] = x[0].slice(0, x[0].length - "_last_readed".length)
+          return x
+  })
+}
+
+function getMessagesElements() {
+  return [...document.getElementsByClassName("tgme_widget_message_wrap js-widget_message_wrap")]
+}
+
+function getMessageTgState(messageElement) {
+  return messageElement.querySelectorAll("[data-post]")[0].getAttribute("data-post").split("/")
+}
+
+function setOnClick(messageElement) {
+  let messageTgState = getMessageTgState(messageElement)
+  let viewsElement = messageElement.getElementsByClassName("tgme_widget_message_views")[0]
+  if(viewsElement){
+      viewsElement.onclick = () => updateTgLastReaded(messageTgState[0], messageTgState[1])
+  }
+}
+
+function setOnClickForElements(messageElements) {
+  messageElements.forEach(messageElement => setOnClick(messageElement))
+}
+
+function setOnClickForAll() {
+  setOnClickForElements(getMessagesElements())
+}
+
+function observeLoadMore() {
+    let messagesHistoryElement = document.getElementsByClassName("tgme_channel_history js-message_history")[0]
+    let observer = new MutationObserver(mutations => {
+        console.log("mutated")
+        setOnClickForAll()
+    });
+    observer.observe(messagesHistoryElement, {subtree:false, childList:true, attributes:false})
+}
+
+function getLatestPostId(response) {
+    return Math.max(...[...response.matchAll('data-post="[^"]*')].map(x => x[0].split("/")[1] - 0))
+}
+
+function getAttributesFromResponse(response, attribute) {
+    return [...response.matchAll(attribute + '="[^"]*')].map(x => x[0].slice(attribute.length + '="'.length))
+}
+
+function getAttributeFromResponse(response, attribute) {
+    return getAttributesFromResponse(response, attribute)[0]
+}
+
+function getTgChannelTitle(response) {
+    return getAttributeFromResponse(response, 'meta property="og:title" content')
+}
+
+function getTgChannelPhoto(response) {
+    return getAttributeFromResponse(response, '<img src')
+}
+
+function getTgChannelUpdateTime(response) {
+    return getAttributesFromResponse(response, 'datetime').reduce((a, b) => new Date(b) > new Date(a) ? b : a)
+}
+
+function compareChannels(a, b) {
+    let aUpdated = getTgState(getTgLastUpdatedId(a))
+    let bUpdated = getTgState(getTgLastUpdatedId(b))
+    aUpdated = aUpdated ? aUpdated : 0
+    bUpdated = bUpdated ? bUpdated : 0
+    return new Date(aUpdated) - new Date(bUpdated)
+}
+
+function compareChannelElements(a, b) {
+    return compareChannels(trimRight(a.id, "_channel_group"), trimRight(b.id, "_channel_group"))
+}
+
+function sortChannels() {
+    var list = document.querySelector('#' + getControlsGroupId());
+    [...list.children]
+        .sort(compareChannelElements)
+        .forEach(node=>list.prepend(node));
+}
+
+function updateControls(channel) {
+    let titleElement = document.getElementById(getTgTitleId(channel))
+    titleElement.innerText = getTgControlText(channel)
+
+    let unreadedCountElement = document.getElementById(getTgUnreadedCountId(channel))
+    let unreadedCount = getTgState(getTgMaxMessageId(channel)) - getTgState(getTgLastReadedId(channel))
+    unreadedCountElement.innerText = Math.max(unreadedCount, 0)
+
+    let photo = document.getElementById(getTgPhotoId(channel))
+    photo.src = getTgState(getTgPhotoId(channel))
+
+    sortChannels()
+}
+
+function updateUnreadedCount(channel) {
+    let xhr = new XMLHttpRequest()
+    xhr.open("GET", "/s/" + channel)
+    xhr.send()
+    xhr.onload = () => {
+        let maxMessage = getLatestPostId(xhr.response)
+        let title = getTgChannelTitle(xhr.response)
+        let photo = getTgChannelPhoto(xhr.response)
+        let lastUpdated = getTgChannelUpdateTime(xhr.response)
+
+        saveTgState(getTgMaxMessageId(channel), maxMessage)
+        saveTgState(getTgTitleId(channel), title)
+        saveTgState(getTgPhotoId(channel), photo)
+        saveTgState(getTgLastUpdatedId(channel), lastUpdated)
+
+        updateControls(channel)
+        }
+}
+
+function updateUnreadedCountForAll() {
+    getSavedTgsWithLastReaded().forEach(x => updateUnreadedCount(x[0]))
+}
+
+function deleteTgChannelState(channel) {
+    Object.entries(localStorage)
+        .map(x => key2channel(x[0]))
+        .filter(x => x.startsWith(channel))
+        .forEach(x => deleteTgState(x))
+}
+
+function deleteTgChannel(channel) {
+    let channelGroup = document.getElementById(getTgChannelGroupId(channel))
+    channelGroup.remove()
+    deleteTgChannelState(channel)
+}
+
+function addTgControl(channel, readed) {
+    let controlsGroup = document.getElementById(getControlsGroupId())
+
+    let channelLineGroupElement = document.createElement("div")
+    channelLineGroupElement.id = getTgChannelGroupId(channel)
+    controlsGroup.append(channelLineGroupElement)
+
+    let unreadedCountElement = document.createElement("div")
+    let unreadedCount = getTgState(getTgMaxMessageId(channel)) - getTgState(getTgLastReadedId(channel))
+    unreadedCountElement.innerText = Math.max(unreadedCount, 0)
+    unreadedCountElement.id = getTgUnreadedCountId(channel)
+    channelLineGroupElement.append(unreadedCountElement)
+
+    let photo = document.createElement("img")
+    photo.classList.add("tgme_widget_message_user_photo")
+    photo.src = getTgState(getTgPhotoId(channel))
+    photo.id = getTgPhotoId(channel)
+    channelLineGroupElement.append(photo)
+
+    let titleElement = document.createElement("a")
+    titleElement.innerText = getTgControlText(channel, readed)
+    titleElement.href = getTgControlLink(channel, readed)
+    titleElement.id = getTgTitleId(channel)
+    channelLineGroupElement.append(titleElement)
+
+    let deleteButton = document.createElement("a")
+    deleteButton.innerText = "❌"
+    deleteButton.onclick = () => deleteTgChannel(channel)
+    channelLineGroupElement.append(deleteButton)
+}
+
+function addButtonsControls() {
+    let footerElement = document.getElementsByClassName("tgme_channel_info")[0]
+
+    let buttonsGroup = document.createElement("div")
+    buttonsGroup.id = getTgButtonsGroupId()
+    footerElement.prepend(buttonsGroup)
+
+    let exportButtonElement = document.createElement("button")
+    exportButtonElement.innerText = "📋export"
+    exportButtonElement.onclick = async () => {
+      let exportData = reverse(btoa(reverse(getSavedTgsWithLastReaded().map(x => x[0] + '/' + x[1]).reduce((a, b) => a + '|' + b))));
+      await navigator.clipboard.writeText(exportData);
+    }
+    buttonsGroup.appendChild(exportButtonElement)
+
+    let importButtonElement = document.createElement("button")
+    importButtonElement.innerText = "📋import"
+    importButtonElement.onclick = async () => {
+      let dataEncoded = await navigator.clipboard.readText();
+      let data = reverse(atob(reverse(dataEncoded)))
+      data.split("|").forEach(x => {
+          let splitted = x.split("/")
+          updateTgLastReaded(splitted[0], splitted[1])
+      })
+    }
+    buttonsGroup.appendChild(importButtonElement)
+
+    let updateButtonElement = document.createElement("button")
+    updateButtonElement.innerText = "🔄"
+    updateButtonElement.onclick = updateUnreadedCountForAll
+    buttonsGroup.appendChild(updateButtonElement)
+}
+
+function addTgControls() {
+  let footerElement = document.getElementsByClassName("tgme_channel_info")[0]
+
+  let controlsGroup = document.createElement("div")
+  controlsGroup.id = getControlsGroupId()
+  footerElement.prepend(controlsGroup)
+
+  let savedTgs = getSavedTgsWithLastReaded()
+  savedTgs.sort((a, b) => compareChannels(b[0], a[0]))
+  savedTgs.forEach(tg => {
+      addTgControl(tg[0], tg[1])
+  })
+  addButtonsControls()
+}
+
+(function() {
+    'use strict';
+    addStyles()
+    setOnClickForAll()
+    addTgControls()
+    observeLoadMore()
+    updateUnreadedCountForAll()
+})();
