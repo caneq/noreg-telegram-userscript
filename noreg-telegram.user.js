@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         No reg Telegram
 // @namespace    http://tampermonkey.net/
-// @version      1.1
-// @description  Store channel views in localstorage
-// @author       You
+// @version      1.2
+// @description  Track publick telegram channels without registration
+// @author       caneq
 // @match        https://t.me/s/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=t.me
 // @grant        GM_setValue
