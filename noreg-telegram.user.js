@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         No reg Telegram
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  Store channel views in localstorage
 // @author       You
 // @match        https://t.me/s/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=t.me
-// @grant        none
+// @grant        GM_setValue
+// @grant        GM_getValue
 // @downloadURL  https://github.com/caneq/noreg-telegram-userscript/raw/main/noreg-telegram.user.js
 // @updateURL    https://github.com/caneq/noreg-telegram-userscript/raw/main/noreg-telegram.user.js
 // ==/UserScript==
@@ -132,29 +133,23 @@ function updateTgMessageLink(channel, readed){
     updateUnreadedCount(channel)
 }
 
-function syncTgValues() {
+function setSyncTgValues() {
     let exportData = getExportData()
-    let xhr = new XMLHttpRequest()
-//     xhr.open("PUT", "/s/" + channel)
-//     xhr.send()
-//     xhr.onload = () => {
-//         let maxMessage = getLatestPostId(xhr.response)
-//         let title = getTgChannelTitle(xhr.response)
-//         let photo = getTgChannelPhoto(xhr.response)
-//         let lastUpdated = getTgChannelUpdateTime(xhr.response)
+    if (GM_getValue("data") != exportData){
+        GM_setValue("data", exportData)
+    }
+}
 
-//         saveTgState(getTgMaxMessageId(channel), maxMessage)
-//         saveTgState(getTgTitleId(channel), title)
-//         saveTgState(getTgPhotoId(channel), photo)
-//         saveTgState(getTgLastUpdatedId(channel), lastUpdated)
-
-//         updateControls(channel)
-//         }
+function getSyncTgValues() {
+    let exportData = GM_getValue("data")
+    let decodedData = decodeExportData(exportData)
+    updateLastViewedFromDecodedExportData(decodedData)
 }
 
 function updateTgLastReaded(channel, readed) {
     saveTgState(getTgLastReadedId(channel), readed)
     updateTgMessageLink(channel, readed)
+    setSyncTgValues()
 }
 
 function deleteTgState(channel) {
@@ -396,4 +391,5 @@ function addTgControls() {
     addTgControls()
     observeLoadMore()
     updateUnreadedCountForAll()
+    getSyncTgValues()
 })();
