@@ -8,6 +8,7 @@
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=t.me
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_xmlhttpRequest
 // @downloadURL  https://github.com/caneq/noreg-telegram-userscript/raw/main/noreg-telegram.user.js
 // @updateURL    https://github.com/caneq/noreg-telegram-userscript/raw/main/noreg-telegram.user.js
 // ==/UserScript==
@@ -20,7 +21,7 @@ function addStyles() {
 }
 
 #tg_buttons_group button {
- margin-right: 10px;
+ margin-right: 5px;
 }
 
 #tg_controls_group {
@@ -87,6 +88,14 @@ function getTgControlLink(channel, readed) {
     return "/s/" + channel + "/" + readed
 }
 
+function getSheetDbKey() {
+    return GM_getValue("sheetDbKey")
+}
+
+function setSheetDbKey(sheetDbKey) {
+    GM_setValue("sheetDbKey", sheetDbKey)
+}
+
 function getTgControlText(channel) {
     let savedName = getTgState(getTgTitleId(channel))
     return savedName || channel
@@ -133,14 +142,14 @@ function updateTgMessageLink(channel, readed){
     updateUnreadedCount(channel)
 }
 
-function setSyncTgValues() {
+function setGmTgValues() {
     let exportData = getExportData()
     if (GM_getValue("data") != exportData){
         GM_setValue("data", exportData)
     }
 }
 
-function getSyncTgValues() {
+function getGmTgValues() {
     let exportData = GM_getValue("data")
     let decodedData = decodeExportData(exportData)
     updateLastViewedFromDecodedExportData(decodedData)
@@ -149,7 +158,7 @@ function getSyncTgValues() {
 function updateTgLastReaded(channel, readed) {
     saveTgState(getTgLastReadedId(channel), readed)
     updateTgMessageLink(channel, readed)
-    setSyncTgValues()
+    setGmTgValues()
 }
 
 function deleteTgState(channel) {
@@ -274,7 +283,7 @@ function updateUnreadedCount(channel) {
         saveTgState(getTgLastUpdatedId(channel), lastUpdated)
 
         updateControls(channel)
-        }
+    }
 }
 
 function updateUnreadedCountForAll() {
@@ -340,6 +349,61 @@ function updateLastViewedFromDecodedExportData(decodedExportData){
       })
 }
 
+function getOrPromptSheetDbKey() {
+    if (!getSheetDbKey()) {
+        let sheetDbKey = prompt("Your SheetDbKey used to store state:")
+        if(sheetDbKey) {
+            setSheetDbKey(sheetDbKey)
+        }
+    }
+
+    return getSheetDbKey()
+}
+
+function getSyncTgValues() {
+    if(!getOrPromptSheetDbKey()) {
+        return
+    }
+
+    GM_xmlhttpRequest({
+        method: "GET",
+        url: "https://sheetdb.io/api/v1/" + getSheetDbKey(),
+        onload: function (result) {
+            console.log("getSyncTgValues")
+            console.log(result)
+            updateLastViewedFromDecodedExportData(decodeExportData(JSON.parse(result.response)[0].value))
+        }
+    });
+}
+
+function setSyncTgValues() {
+    if(!getOrPromptSheetDbKey()) {
+        return
+    }
+
+    let exportData = getExportData()
+    console.log(JSON.stringify({value: exportData}))
+    GM_xmlhttpRequest({
+        method: "PATCH",
+        url: "https://sheetdb.io/api/v1/" + getSheetDbKey() + "/id/1",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        data: JSON.stringify({value: exportData}),
+        onload: function (result) {
+            console.log("setSyncTgValues")
+            console.log(result)
+        }
+    });
+}
+
+function addButtonControl(buttonsGroup, innerText, onclick) {
+    let ButtonElement = document.createElement("button")
+    ButtonElement.innerText = innerText
+    ButtonElement.onclick = onclick
+    buttonsGroup.appendChild(ButtonElement)
+}
+
 function addButtonsControls() {
     let footerElement = document.getElementsByClassName("tgme_channel_info")[0]
 
@@ -347,26 +411,15 @@ function addButtonsControls() {
     buttonsGroup.id = getTgButtonsGroupId()
     footerElement.prepend(buttonsGroup)
 
-    let exportButtonElement = document.createElement("button")
-    exportButtonElement.innerText = "📋export"
-    exportButtonElement.onclick = async () => {
-      await navigator.clipboard.writeText(getExportData());
-    }
-    buttonsGroup.appendChild(exportButtonElement)
-
-    let importButtonElement = document.createElement("button")
-    importButtonElement.innerText = "📋import"
-    importButtonElement.onclick = async () => {
+    addButtonControl(buttonsGroup, "🔄", updateUnreadedCountForAll)
+    addButtonControl(buttonsGroup, "⬇️🌎", getSyncTgValues)
+    addButtonControl(buttonsGroup, "⬆️🌎", setSyncTgValues)
+    addButtonControl(buttonsGroup, "⬇️📋", async () => {
       let dataEncoded = await navigator.clipboard.readText();
       let data = decodeExportData(dataEncoded)
       updateLastViewedFromDecodedExportData(data)
-    }
-    buttonsGroup.appendChild(importButtonElement)
-
-    let updateButtonElement = document.createElement("button")
-    updateButtonElement.innerText = "🔄"
-    updateButtonElement.onclick = updateUnreadedCountForAll
-    buttonsGroup.appendChild(updateButtonElement)
+    })
+    addButtonControl(buttonsGroup, "⬆️📋", async () => await navigator.clipboard.writeText(getExportData()))
 }
 
 function addTgControls() {
@@ -391,5 +444,5 @@ function addTgControls() {
     addTgControls()
     observeLoadMore()
     updateUnreadedCountForAll()
-    getSyncTgValues()
+    getGmTgValues()
 })();
