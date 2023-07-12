@@ -1,11 +1,10 @@
 // ==UserScript==
-// @name         No reg Telegram
+// @name         noregtg
 // @namespace    http://tampermonkey.net/
 // @version      1.2
 // @description  Track publick telegram channels without registration
 // @author       caneq
 // @match        https://t.me/s/*
-// @icon         https://www.google.com/s2/favicons?sz=64&domain=t.me
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
@@ -334,8 +333,20 @@ function addTgControl(channel, readed) {
     channelLineGroupElement.append(deleteButton)
 }
 
+function btoaWithoutEquals(data) {
+    return btoa(data).replaceAll("=", "")
+}
+
+function atobWithoutEquals(data) {
+    let equalsCount = data.length % 4
+    if (equalsCount == 3) {
+        equalsCount = 1
+    }
+    return atob(data + "=".repeat(equalsCount))
+}
+
 function getExportData(){
-    return reverse(btoa(reverse(getSavedTgsWithLastReaded().map(x => x[0] + '/' + x[1]).reduce((a, b) => a + '|' + b))))
+    return reverse(btoaWithoutEquals(reverse(getSavedTgsWithLastReaded().map(x => x[0] + '/' + x[1]).reduce((a, b) => a + '|' + b))))
 }
 
 function decodeExportData(exportData) {
