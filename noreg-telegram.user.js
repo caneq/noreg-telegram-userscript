@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         noregtg
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  Track publick telegram channels without registration
 // @author       caneq
 // @match        https://t.me/s/*
