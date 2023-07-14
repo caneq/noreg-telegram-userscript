@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         noregtg
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @description  Track publick telegram channels without registration
 // @author       caneq
 // @match        https://t.me/s/*
@@ -63,11 +63,15 @@ function addStyles() {
  color: var(--second-color);
 }
 
-[id$="_title"] {
+[id$="_tg_title"] {
  text-overflow: ellipsis;
  display: block;
  overflow: hidden;
  max-width: calc(100%);
+}
+
+.tgme_header_right_column_show {
+ margin-top: 30px;
 }
 `
     document.head.appendChild(style);
@@ -94,7 +98,7 @@ function getTgChannelGroupId(channel) {
 }
 
 function getTgTitleId(channel) {
-    return channel + "_title"
+    return channel + "_tg_title"
 }
 
 function getTgUnreadedCountId(channel){
@@ -518,6 +522,24 @@ function addTgControls() {
   addButtonsControls()
 }
 
+function toggleSidebarClass() {
+    console.log("tgme_header_right_column onclick")
+    if (document.querySelector(".tgme_header_right_column")) {
+        document.querySelector(".tgme_header_right_column").classList.replace("tgme_header_right_column", "tgme_header_right_column_show")
+    }
+    else {
+        document.querySelector(".tgme_header_right_column_show")?.classList.replace("tgme_header_right_column_show", "tgme_header_right_column")
+    }
+}
+
+function onclickToggleSidebar() {
+    document.querySelector(".tgme_channel_join_telegram").removeAttribute("href")
+    document.querySelector(".tgme_header_link").removeAttribute("href")
+    document.querySelector(".tgme_channel_download_telegram").removeAttribute("href")
+    document.querySelector(".tgme_channel_download_telegram").onclick = toggleSidebarClass
+    document.querySelector(".tgme_channel_join_telegram").onclick = toggleSidebarClass
+}
+
 (function() {
     'use strict';
     addStyles()
@@ -525,4 +547,5 @@ function addTgControls() {
     addTgControls()
     observeLoadMore()
     getGmTgValues()
+    onclickToggleSidebar()
 })();
