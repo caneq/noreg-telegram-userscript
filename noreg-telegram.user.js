@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         noregtg
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  Track publick telegram channels without registration
 // @author       caneq
 // @match        https://t.me/s/*
@@ -28,20 +28,46 @@ function addStyles() {
 }
 
 [id$="_channel_group"] {
+ display: flex;
+ justify-content: left;
+ align-items: center;
  white-space: nowrap;
 }
 
+.channel_button {
+ display: none;
+ justify-content: right;
+}
+
+[id$="_channel_group"]:hover .channel_button {
+ display: unset;
+}
+
 [id$="_unreaded_count"] {
- display:inline-block;
  min-width: 1.5em;
  font-weight: bold;
 }
 
+.title_group {
+ margin-left: 2px;
+ display: block;
+ max-width: calc(70%);
+}
+
+.title_details {
+ margin-top: 0px;
+ margin-left: 2px;
+ margin-bottom: 0px;
+ padding: 0px;
+ font-size: 12px;
+ color: var(--second-color);
+}
+
 [id$="_title"] {
  text-overflow: ellipsis;
- display:inline-block;
+ display: block;
  overflow: hidden;
- width: calc(70%);
+ max-width: calc(100%);
 }
 `
     document.head.appendChild(style);
@@ -252,7 +278,37 @@ function sortChannels() {
         .forEach(node=>list.prepend(node));
 }
 
-function updateControls(channel) {
+function isToday(date) {
+  let today = new Date()
+  return date.getDate() == today.getDate() && date.getMonth() == today.getMonth() && date.getFullYear() == today.getFullYear()
+}
+
+function isYesterday(date){
+  let today = new Date()
+  return date.getDate() == today.getDate() - 1 && date.getMonth() == today.getMonth() && date.getFullYear() == today.getFullYear()
+}
+
+function padNumber(number, maxDigits) {
+    return "0".repeat(Math.max(maxDigits - (number + '').length, 0)) + number
+}
+
+function formatTgTime(date) {
+    return padNumber(date.getHours(), 2) + ':' + padNumber(date.getMinutes(), 2)
+}
+
+function formatTgDate(date) {
+    if (isToday(date)) {
+        return formatTgTime(date)
+    }
+
+    if (isYesterday(date)) {
+        return 'Yesterday ' + formatTgTime(date)
+    }
+
+    return date.toLocaleString('default', { year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "numeric" })
+}
+
+function updateControlsValues(channel) {
     let titleElement = document.getElementById(getTgTitleId(channel))
     titleElement.innerText = getTgControlText(channel)
 
@@ -263,6 +319,12 @@ function updateControls(channel) {
     let photo = document.getElementById(getTgPhotoId(channel))
     photo.src = getTgState(getTgPhotoId(channel))
 
+    let lastUpdated = document.getElementById(getTgLastUpdatedId(channel))
+    lastUpdated.innerText = formatTgDate(new Date(getTgState(getTgLastUpdatedId(channel))))
+}
+
+function updateControls(channel) {
+    updateControlsValues(channel)
     sortChannels()
 }
 
@@ -310,27 +372,35 @@ function addTgControl(channel, readed) {
     controlsGroup.append(channelLineGroupElement)
 
     let unreadedCountElement = document.createElement("div")
-    let unreadedCount = getTgState(getTgMaxMessageId(channel)) - getTgState(getTgLastReadedId(channel))
-    unreadedCountElement.innerText = Math.max(unreadedCount, 0)
     unreadedCountElement.id = getTgUnreadedCountId(channel)
     channelLineGroupElement.append(unreadedCountElement)
 
     let photo = document.createElement("img")
     photo.classList.add("tgme_widget_message_user_photo")
-    photo.src = getTgState(getTgPhotoId(channel))
     photo.id = getTgPhotoId(channel)
     channelLineGroupElement.append(photo)
 
+    let titleGroup = document.createElement("div")
+    titleGroup.classList.add("title_group")
+    channelLineGroupElement.append(titleGroup)
+
     let titleElement = document.createElement("a")
-    titleElement.innerText = getTgControlText(channel, readed)
     titleElement.href = getTgControlLink(channel, readed)
     titleElement.id = getTgTitleId(channel)
-    channelLineGroupElement.append(titleElement)
+    titleGroup.append(titleElement)
+
+    let lastUpdatedElement = document.createElement("p")
+    lastUpdatedElement.id = getTgLastUpdatedId(channel)
+    lastUpdatedElement.classList.add("title_details")
+    titleGroup.append(lastUpdatedElement)
 
     let deleteButton = document.createElement("a")
+    deleteButton.classList.add("channel_button")
     deleteButton.innerText = "❌"
     deleteButton.onclick = () => deleteTgChannel(channel)
     channelLineGroupElement.append(deleteButton)
+
+    updateControlsValues(channel)
 }
 
 function btoaWithoutEquals(data) {
@@ -454,6 +524,5 @@ function addTgControls() {
     setOnClickForAll()
     addTgControls()
     observeLoadMore()
-    updateUnreadedCountForAll()
     getGmTgValues()
 })();
