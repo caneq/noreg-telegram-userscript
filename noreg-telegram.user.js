@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         noregtg
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.7
 // @description  Track publick telegram channels without registration
 // @author       caneq
 // @match        https://t.me/s/*
@@ -113,7 +113,7 @@ function getTgTitleId(channel) {
     return channel + "_tg_title"
 }
 
-function getTgUnreadedCountId(channel){
+function getTgUnreadedCountId(channel) {
     return channel + "_unreaded_count"
 }
 
@@ -150,36 +150,36 @@ function getTgControlText(channel) {
     return savedName || channel
 }
 
-function reverse(s){
+function reverse(s) {
     return s.split("").reverse().join("");
 }
 
 function trimRight(s, trim) {
-    if(s.endsWith(trim)) {
+    if (s.endsWith(trim)) {
         return s.slice(0, s.length - trim.length)
     }
-    else{
+    else {
         return s
     }
 }
 
 function encryptKey(channel) {
-  return encodeString("tg" + channel)
+    return encodeString("tg" + channel)
 }
 
 function key2channel(key) {
-  return decodeString(key).slice(2)
+    return decodeString(key).slice(2)
 }
 
 function saveTgState(key, value) {
-  localStorage.setItem(encryptKey(key), encodeString(value))
+    localStorage.setItem(encryptKey(key), encodeString(value))
 }
 
 function getTgState(key) {
-  return decodeString(localStorage.getItem(encryptKey(key)))
+    return decodeString(localStorage.getItem(encryptKey(key)))
 }
 
-function updateTgMessageLink(channel, readed){
+function updateTgMessageLink(channel, readed) {
     let controlElement = document.getElementById(getTgTitleId(channel))
     if (controlElement) {
         controlElement.href = getTgControlLink(channel, readed)
@@ -193,7 +193,7 @@ function updateTgMessageLink(channel, readed){
 
 function setGmTgValues() {
     let exportData = getExportData()
-    if (GM_getValue("data") != exportData){
+    if (GM_getValue("data") != exportData) {
         GM_setValue("data", exportData)
         console.log("setGmTgValues called, updated")
     }
@@ -221,7 +221,7 @@ function updateTgLastReaded(channel, readed) {
 
 function updateTgLastReadedIfGreater(channel, readed, version) {
     let savedLastReaded = getTgState(getTgLastReadedId(channel)) - 0;
-    if(savedLastReaded && savedLastReaded >= readed - 0) {
+    if (savedLastReaded && savedLastReaded >= readed - 0) {
         return
     }
 
@@ -239,43 +239,43 @@ function deleteTgState(channel) {
 
 function getSavedTgChannelsByKeyPostfixValues(keyPostfix) {
     return Object.entries(localStorage).map(channelState => {
-      channelState[0] = key2channel(channelState[0])
-      channelState[1] = decodeString(channelState[1])
-      return channelState
+        channelState[0] = key2channel(channelState[0])
+        channelState[1] = decodeString(channelState[1])
+        return channelState
     })
         .filter(x => x[0].endsWith(keyPostfix))
         .map(x => {
             x[0] = x[0].slice(0, x[0].length - keyPostfix.length)
             return x
-    })
-  }
+        })
+}
 
 function getSavedTgsWithLastReaded() {
     return getSavedTgChannelsByKeyPostfixValues("_last_readed")
 }
 
 function getMessagesElements() {
-  return [...document.getElementsByClassName("tgme_widget_message_wrap js-widget_message_wrap")]
+    return [...document.getElementsByClassName("tgme_widget_message_wrap js-widget_message_wrap")]
 }
 
 function getMessageTgState(messageElement) {
-  return messageElement.querySelectorAll("[data-post]")[0].getAttribute("data-post").split("/")
+    return messageElement.querySelectorAll("[data-post]")[0].getAttribute("data-post").split("/")
 }
 
 function setOnClick(messageElement) {
-  let messageTgState = getMessageTgState(messageElement)
-  let viewsElement = messageElement.getElementsByClassName("tgme_widget_message_views")[0]
-  if(viewsElement){
-      viewsElement.onclick = () => updateTgLastReaded(messageTgState[0], messageTgState[1])
-  }
+    let messageTgState = getMessageTgState(messageElement)
+    let viewsElement = messageElement.getElementsByClassName("tgme_widget_message_views")[0]
+    if (viewsElement) {
+        viewsElement.onclick = () => updateTgLastReaded(messageTgState[0], messageTgState[1])
+    }
 }
 
 function setOnClickForElements(messageElements) {
-  messageElements.forEach(messageElement => setOnClick(messageElement))
+    messageElements.forEach(messageElement => setOnClick(messageElement))
 }
 
 function setOnClickForAll() {
-  setOnClickForElements(getMessagesElements())
+    setOnClickForElements(getMessagesElements())
 }
 
 function observeLoadMore() {
@@ -284,7 +284,7 @@ function observeLoadMore() {
         console.log("mutated")
         setOnClickForAll()
     });
-    observer.observe(messagesHistoryElement, {subtree:false, childList:true, attributes:false})
+    observer.observe(messagesHistoryElement, { subtree: false, childList: true, attributes: false })
 }
 
 function getLatestPostId(response) {
@@ -327,17 +327,17 @@ function sortChannels() {
     var list = document.querySelector('#' + getControlsGroupId());
     [...list.children]
         .sort(compareChannelElements)
-        .forEach(node=>list.prepend(node));
+        .forEach(node => list.prepend(node));
 }
 
 function isToday(date) {
-  let today = new Date()
-  return date.getDate() == today.getDate() && date.getMonth() == today.getMonth() && date.getFullYear() == today.getFullYear()
+    let today = new Date()
+    return date.getDate() == today.getDate() && date.getMonth() == today.getMonth() && date.getFullYear() == today.getFullYear()
 }
 
-function isYesterday(date){
-  let today = new Date()
-  return date.getDate() == today.getDate() - 1 && date.getMonth() == today.getMonth() && date.getFullYear() == today.getFullYear()
+function isYesterday(date) {
+    let today = new Date()
+    return date.getDate() == today.getDate() - 1 && date.getMonth() == today.getMonth() && date.getFullYear() == today.getFullYear()
 }
 
 function formatTgTime(date) {
@@ -484,7 +484,7 @@ function encodeString(dataString) {
     return dataString ? reverse(btoaWithoutEquals(reverse(encodeURIComponent(dataString + '')))) : dataString
 }
 
-function getExportData(){
+function getExportData() {
     let dataString = getSavedTgsWithLastReaded().map(x => x[0] + '/' + x[1]).sort((a, b) => a.localeCompare(b)).reduce((a, b) => a + '|' + b) + '|' + new Date().toISOString()
     return encodeString(dataString)
 }
@@ -498,7 +498,7 @@ function mergeLastViewedFromDecodedExportData(decodedExportData, deleteNotPresen
         updateTgLastReadedIfGreater(splitted[0], splitted[1], versionParsed)
     })
 
-    if (deleteNotPresented){
+    if (deleteNotPresented) {
         let savedChannels = getSavedTgsWithLastReaded().map(x => x[0]);
         console.log(savedChannels)
         let loadedChannels = channelStates.map(x => x[0])
@@ -508,7 +508,7 @@ function mergeLastViewedFromDecodedExportData(decodedExportData, deleteNotPresen
         deletedChannels.forEach(x => {
             console.log("viewed date")
             console.log(new Date(getTgState(getTgViewedDateId(x))))
-            if(new Date(getTgState(getTgViewedDateId(x))) < versionParsed){
+            if (new Date(getTgState(getTgViewedDateId(x))) < versionParsed) {
                 deleteTgChannel(x)
             }
         })
@@ -518,7 +518,7 @@ function mergeLastViewedFromDecodedExportData(decodedExportData, deleteNotPresen
 function getOrPrompt(get, set, keyName) {
     if (!get()) {
         let input = prompt(`Your ${keyName}:`)
-        if(input) {
+        if (input) {
             set(input)
         }
     }
@@ -536,8 +536,8 @@ function getOrPromptGoogleSheetKey() {
 
 function loadMergeSyncTgValues(then, onError) {
     let googleSheetKey = getOrPromptGoogleSheetKey();
-    if(!googleSheetKey) {
-        if(onError){
+    if (!googleSheetKey) {
+        if (onError) {
             onError()
         }
         return
@@ -550,7 +550,7 @@ function loadMergeSyncTgValues(then, onError) {
             console.log("loadMergeSyncTgValues")
             if (result.status != 200) {
                 console.log(result)
-                if(onError){
+                if (onError) {
                     onError()
                 }
                 return
@@ -592,7 +592,7 @@ function cutOffAfterLast(str, separator) {
     return str.slice(0, str.lastIndexOf(separator))
 }
 
-function channelStatesEquals(exportData1, exportData2){
+function channelStatesEquals(exportData1, exportData2) {
     console.log(cutOffAfterLast(decodeString(exportData1), '|'))
     console.log(cutOffAfterLast(decodeString(exportData2), '|'))
     return cutOffAfterLast(decodeString(exportData1), '|') === cutOffAfterLast(decodeString(exportData2), '|')
@@ -610,24 +610,24 @@ function loadMergeUploadSyncTgValues() {
             return
         }
 
-        if(!getOrPromptSheetDbKey()) {
+        if (!getOrPromptSheetDbKey()) {
             loadMergeUploadSyncBtnTextFail()
             return
         }
 
         let exportData = getExportData()
-        console.log(JSON.stringify({value: exportData}))
+        console.log(JSON.stringify({ value: exportData }))
         GM_xmlhttpRequest({
             method: "PATCH",
             url: "https://sheetdb.io/api/v1/" + getSheetDbKey() + "/id/1",
             headers: {
                 "Content-Type": "application/json"
             },
-            data: JSON.stringify({value: exportData}),
+            data: JSON.stringify({ value: exportData }),
             onload: function (result) {
                 console.log("loadMergeUploadSyncTgValues")
                 console.log(result)
-                if (result.status != 200){
+                if (result.status != 200) {
                     loadMergeUploadSyncBtnTextFail()
                     return
                 }
@@ -637,9 +637,9 @@ function loadMergeUploadSyncTgValues() {
             }
         });
     },
-    () => {
-        loadMergeUploadSyncBtnTextFail()
-    })
+        () => {
+            loadMergeUploadSyncBtnTextFail()
+        })
 }
 
 function addButtonControl(buttonsGroup, innerText, onclick, id) {
@@ -662,26 +662,26 @@ function addButtonsControls() {
     addButtonControl(buttonsGroup, "🔄", updateUnreadedCountForAll)
     addButtonControl(buttonsGroup, BTN_LOAD_MERGE_UPLOAD_SYNC_INNER_TEXT, loadMergeUploadSyncTgValues, BTN_LOAD_MERGE_UPLOAD_SYNC_ID)
     addButtonControl(buttonsGroup, "⬇️📋", async () => {
-      let dataEncoded = await navigator.clipboard.readText();
-      let data = decodeString(dataEncoded)
-      mergeLastViewedFromDecodedExportData(data)
+        let dataEncoded = await navigator.clipboard.readText();
+        let data = decodeString(dataEncoded)
+        mergeLastViewedFromDecodedExportData(data)
     })
     addButtonControl(buttonsGroup, "⬆️📋", async () => await navigator.clipboard.writeText(getExportData()))
 }
 
 function addTgControls() {
-  let footerElement = document.getElementsByClassName("tgme_channel_info")[0]
+    let footerElement = document.getElementsByClassName("tgme_channel_info")[0]
 
-  let controlsGroup = document.createElement("div")
-  controlsGroup.id = getControlsGroupId()
-  footerElement.prepend(controlsGroup)
+    let controlsGroup = document.createElement("div")
+    controlsGroup.id = getControlsGroupId()
+    footerElement.prepend(controlsGroup)
 
-  let savedTgs = getSavedTgsWithLastReaded()
-  savedTgs.sort((a, b) => compareChannels(b[0], a[0]))
-  savedTgs.forEach(tg => {
-      addTgControl(tg[0], tg[1])
-  })
-  addButtonsControls()
+    let savedTgs = getSavedTgsWithLastReaded()
+    savedTgs.sort((a, b) => compareChannels(b[0], a[0]))
+    savedTgs.forEach(tg => {
+        addTgControl(tg[0], tg[1])
+    })
+    addButtonsControls()
 }
 
 function toggleSidebarClass() {
@@ -702,7 +702,7 @@ function onclickToggleSidebar() {
     document.querySelector(".tgme_channel_join_telegram").onclick = toggleSidebarClass
 }
 
-(function() {
+(function () {
     'use strict';
     addStyles()
     setOnClickForAll()
