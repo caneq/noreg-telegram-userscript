@@ -89,6 +89,10 @@ function getTgDeletedDateId(channel) {
     return channel + "_deleted_date_id"
 }
 
+function getTgViewedDateId(channel) {
+    return channel + "_viewed_date_id"
+}
+
 function getTgLastUpdatedId(channel) {
     return channel + "_last_updated"
 }
@@ -211,6 +215,7 @@ function setLastReadedState(channel, readed) {
 
 function updateTgLastReaded(channel, readed) {
     setLastReadedState(channel, readed)
+    saveTgState(getTgViewedDateId(channel), new Date())
     updateTgMessageLink(channel, readed)
 }
 
@@ -480,18 +485,34 @@ function encodeString(dataString) {
 }
 
 function getExportData(){
-    let dataString = getSavedTgsWithLastReaded().map(x => x[0] + '/' + x[1]).reduce((a, b) => a + '|' + b) + '|' + new Date().toISOString()
+    let dataString = getSavedTgsWithLastReaded().map(x => x[0] + '/' + x[1]).sort((a, b) => a.localeCompare(b)).reduce((a, b) => a + '|' + b) + '|' + new Date().toISOString()
     return encodeString(dataString)
 }
 
-function mergeLastViewedFromDecodedExportData(decodedExportData) {
+function mergeLastViewedFromDecodedExportData(decodedExportData, deleteNotPresented) {
     let version = decodedExportData.substring(decodedExportData.lastIndexOf('|') + 1)
     let versionParsed = Date.parse(version) ? new Date(version) : new Date(0)
+    let channelStates = cutOffAfterLast(decodedExportData, "|").split("|").map(x => x.split("/"))
 
-    cutOffAfterLast(decodedExportData, "|").split("|").forEach(x => {
-          let splitted = x.split("/")
-          updateTgLastReadedIfGreater(splitted[0], splitted[1], versionParsed)
-      })
+    channelStates.forEach(splitted => {
+        updateTgLastReadedIfGreater(splitted[0], splitted[1], versionParsed)
+    })
+
+    if (deleteNotPresented){
+        let savedChannels = getSavedTgsWithLastReaded().map(x => x[0]);
+        console.log(savedChannels)
+        let loadedChannels = channelStates.map(x => x[0])
+        console.log(loadedChannels)
+        let deletedChannels = savedChannels.filter(local => !loadedChannels.includes(local))
+        console.log(deletedChannels)
+        deletedChannels.forEach(x => {
+            console.log("viewed date")
+            console.log(new Date(getTgState(getTgViewedDateId(x))))
+            if(new Date(getTgState(getTgViewedDateId(x))) < versionParsed){
+                deleteTgChannel(x)
+            }
+        })
+    }
 }
 
 function getOrPrompt(get, set, keyName) {
@@ -536,7 +557,7 @@ function loadMergeSyncTgValues(then, onError) {
             }
             let exportData = result.response.match("<div class=\"softmerge-inner.+?>(.+?)<\\/div>")[1]
             console.log(exportData)
-            mergeLastViewedFromDecodedExportData(decodeString(exportData))
+            mergeLastViewedFromDecodedExportData(decodeString(exportData), true)
             if (then) {
                 then(exportData)
             }
@@ -572,6 +593,8 @@ function cutOffAfterLast(str, separator) {
 }
 
 function channelStatesEquals(exportData1, exportData2){
+    console.log(cutOffAfterLast(decodeString(exportData1), '|'))
+    console.log(cutOffAfterLast(decodeString(exportData2), '|'))
     return cutOffAfterLast(decodeString(exportData1), '|') === cutOffAfterLast(decodeString(exportData2), '|')
 }
 
