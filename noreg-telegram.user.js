@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         noregtg
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @description  Track publick telegram channels without registration
 // @author       caneq
 // @match        https://t.me/s/*
@@ -12,6 +12,9 @@
 // @updateURL    https://github.com/caneq/noreg-telegram-userscript/raw/main/noreg-telegram.user.js
 // ==/UserScript==
 
+const BTN_LOAD_MERGE_UPLOAD_SYNC_ID = "BTN_LOAD_MERGE_UPLOAD_SYNC_ID"
+const BTN_LOAD_MERGE_UPLOAD_SYNC_INNER_TEXT = "🌎"
+
 function addStyles() {
     const style = document.createElement('style');
     style.innerHTML = `
@@ -21,6 +24,7 @@ function addStyles() {
 
 #tg_buttons_group button {
  margin-right: 5px;
+ min-width: 3em;
 }
 
 #tg_controls_group {
@@ -81,6 +85,10 @@ function getTgLastReadedId(channel) {
     return channel + "_last_readed"
 }
 
+function getTgDeletedDateId(channel) {
+    return channel + "_deleted_date_id"
+}
+
 function getTgLastUpdatedId(channel) {
     return channel + "_last_updated"
 }
@@ -125,6 +133,14 @@ function setSheetDbKey(sheetDbKey) {
     GM_setValue("sheetDbKey", sheetDbKey)
 }
 
+function getGoogleSheetKey() {
+    return GM_getValue("googleSheetKey")
+}
+
+function setGoogleSheetKey(googleSheetKey) {
+    GM_setValue("googleSheetKey", googleSheetKey)
+}
+
 function getTgControlText(channel) {
     let savedName = getTgState(getTgTitleId(channel))
     return savedName || channel
@@ -144,19 +160,19 @@ function trimRight(s, trim) {
 }
 
 function encryptKey(channel) {
-  return reverse("tg" + channel)
+  return encodeString("tg" + channel)
 }
 
 function key2channel(key) {
-  return reverse(key).slice(2)
+  return decodeString(key).slice(2)
 }
 
 function saveTgState(key, value) {
-  localStorage.setItem(encryptKey(key), value)
+  localStorage.setItem(encryptKey(key), encodeString(value))
 }
 
 function getTgState(key) {
-  return localStorage.getItem(encryptKey(key))
+  return decodeString(localStorage.getItem(encryptKey(key)))
 }
 
 function updateTgMessageLink(channel, readed){
@@ -175,35 +191,62 @@ function setGmTgValues() {
     let exportData = getExportData()
     if (GM_getValue("data") != exportData){
         GM_setValue("data", exportData)
+        console.log("setGmTgValues called, updated")
+    }
+    else {
+        console.log("setGmTgValues called, skipped")
     }
 }
 
-function getGmTgValues() {
+function mergeGmTgValues() {
     let exportData = GM_getValue("data")
-    let decodedData = decodeExportData(exportData)
-    updateLastViewedFromDecodedExportData(decodedData)
+    let decodedData = decodeString(exportData)
+    mergeLastViewedFromDecodedExportData(decodedData)
+}
+
+function setLastReadedState(channel, readed) {
+    saveTgState(getTgLastReadedId(channel), readed)
+    setGmTgValues()
 }
 
 function updateTgLastReaded(channel, readed) {
-    saveTgState(getTgLastReadedId(channel), readed)
+    setLastReadedState(channel, readed)
     updateTgMessageLink(channel, readed)
-    setGmTgValues()
+}
+
+function updateTgLastReadedIfGreater(channel, readed, version) {
+    let savedLastReaded = getTgState(getTgLastReadedId(channel)) - 0;
+    if(savedLastReaded && savedLastReaded >= readed - 0) {
+        return
+    }
+
+    let deletedDate = new Date(getTgState(getTgDeletedDateId(channel)));
+    if (!savedLastReaded && deletedDate > version) {
+        return
+    }
+    updateTgLastReaded(channel, readed)
 }
 
 function deleteTgState(channel) {
     localStorage.removeItem(encryptKey(channel))
+    setGmTgValues()
 }
 
+function getSavedTgChannelsByKeyPostfixValues(keyPostfix) {
+    return Object.entries(localStorage).map(channelState => {
+      channelState[0] = key2channel(channelState[0])
+      channelState[1] = decodeString(channelState[1])
+      return channelState
+    })
+        .filter(x => x[0].endsWith(keyPostfix))
+        .map(x => {
+            x[0] = x[0].slice(0, x[0].length - keyPostfix.length)
+            return x
+    })
+  }
+
 function getSavedTgsWithLastReaded() {
-  return Object.entries(localStorage).map(channelState => {
-    channelState[0] = key2channel(channelState[0])
-    return channelState
-  })
-      .filter(x => x[0].endsWith("_last_readed"))
-      .map(x => {
-          x[0] = x[0].slice(0, x[0].length - "_last_readed".length)
-          return x
-  })
+    return getSavedTgChannelsByKeyPostfixValues("_last_readed")
 }
 
 function getMessagesElements() {
@@ -292,12 +335,8 @@ function isYesterday(date){
   return date.getDate() == today.getDate() - 1 && date.getMonth() == today.getMonth() && date.getFullYear() == today.getFullYear()
 }
 
-function padNumber(number, maxDigits) {
-    return "0".repeat(Math.max(maxDigits - (number + '').length, 0)) + number
-}
-
 function formatTgTime(date) {
-    return padNumber(date.getHours(), 2) + ':' + padNumber(date.getMinutes(), 2)
+    return date.toLocaleString('default', { hour: "numeric", minute: "numeric" })
 }
 
 function formatTgDate(date) {
@@ -312,24 +351,36 @@ function formatTgDate(date) {
     return date.toLocaleString('default', { year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "numeric" })
 }
 
-function updateControlsValues(channel) {
-    let titleElement = document.getElementById(getTgTitleId(channel))
-    titleElement.innerText = getTgControlText(channel)
+function updateInnerTextIfNeeded(id, innerText) {
+    innerText = innerText + ''
+    let element = document.getElementById(id)
+    if (element.innerText !== innerText) {
+        element.innerText = innerText
+        return true
+    }
 
-    let unreadedCountElement = document.getElementById(getTgUnreadedCountId(channel))
+    return false
+}
+
+function updateControlsValues(channel) {
+    updateInnerTextIfNeeded(getTgTitleId(channel), getTgControlText(channel))
     let unreadedCount = getTgState(getTgMaxMessageId(channel)) - getTgState(getTgLastReadedId(channel))
-    unreadedCountElement.innerText = Math.max(unreadedCount, 0)
+    updateInnerTextIfNeeded(getTgUnreadedCountId(channel), Math.max(unreadedCount, 0))
 
     let photo = document.getElementById(getTgPhotoId(channel))
-    photo.src = getTgState(getTgPhotoId(channel))
+    let newPhotoSrc = getTgState(getTgPhotoId(channel))
+    if (photo.src !== newPhotoSrc) {
+        photo.src = newPhotoSrc
+    }
 
-    let lastUpdated = document.getElementById(getTgLastUpdatedId(channel))
-    lastUpdated.innerText = formatTgDate(new Date(getTgState(getTgLastUpdatedId(channel))))
+    return updateInnerTextIfNeeded(getTgLastUpdatedId(channel), formatTgDate(new Date(getTgState(getTgLastUpdatedId(channel)))))
 }
 
 function updateControls(channel) {
-    updateControlsValues(channel)
-    sortChannels()
+    let sortColumnValueChanged = updateControlsValues(channel)
+    if (sortColumnValueChanged) {
+        sortChannels()
+    }
 }
 
 function updateUnreadedCount(channel) {
@@ -366,6 +417,7 @@ function deleteTgChannel(channel) {
     let channelGroup = document.getElementById(getTgChannelGroupId(channel))
     channelGroup.remove()
     deleteTgChannelState(channel)
+    saveTgState(getTgDeletedDateId(channel), new Date())
 }
 
 function addTgControl(channel, readed) {
@@ -419,74 +471,162 @@ function atobWithoutEquals(data) {
     return atob(data + "=".repeat(equalsCount))
 }
 
+function decodeString(dataString) {
+    return dataString ? decodeURIComponent(reverse(atobWithoutEquals(reverse(dataString)))) : dataString
+}
+
+function encodeString(dataString) {
+    return dataString ? reverse(btoaWithoutEquals(reverse(encodeURIComponent(dataString + '')))) : dataString
+}
+
 function getExportData(){
-    return reverse(btoaWithoutEquals(reverse(getSavedTgsWithLastReaded().map(x => x[0] + '/' + x[1]).reduce((a, b) => a + '|' + b))))
+    let dataString = getSavedTgsWithLastReaded().map(x => x[0] + '/' + x[1]).reduce((a, b) => a + '|' + b) + '|' + new Date().toISOString()
+    return encodeString(dataString)
 }
 
-function decodeExportData(exportData) {
-    return reverse(atob(reverse(exportData)))
-}
+function mergeLastViewedFromDecodedExportData(decodedExportData) {
+    let version = decodedExportData.substring(decodedExportData.lastIndexOf('|') + 1)
+    let versionParsed = Date.parse(version) ? new Date(version) : new Date(0)
 
-function updateLastViewedFromDecodedExportData(decodedExportData){
-    decodedExportData.split("|").forEach(x => {
+    cutOffAfterLast(decodedExportData, "|").split("|").forEach(x => {
           let splitted = x.split("/")
-          updateTgLastReaded(splitted[0], splitted[1])
+          updateTgLastReadedIfGreater(splitted[0], splitted[1], versionParsed)
       })
 }
 
-function getOrPromptSheetDbKey() {
-    if (!getSheetDbKey()) {
-        let sheetDbKey = prompt("Your SheetDbKey used to store state:")
-        if(sheetDbKey) {
-            setSheetDbKey(sheetDbKey)
+function getOrPrompt(get, set, keyName) {
+    if (!get()) {
+        let input = prompt(`Your ${keyName}:`)
+        if(input) {
+            set(input)
         }
     }
 
-    return getSheetDbKey()
+    return get()
 }
 
-function getSyncTgValues() {
-    if(!getOrPromptSheetDbKey()) {
+function getOrPromptSheetDbKey() {
+    return getOrPrompt(getSheetDbKey, setSheetDbKey, "SheetDb key")
+}
+
+function getOrPromptGoogleSheetKey() {
+    return getOrPrompt(getGoogleSheetKey, setGoogleSheetKey, "Google sheet key")
+}
+
+function loadMergeSyncTgValues(then, onError) {
+    let googleSheetKey = getOrPromptGoogleSheetKey();
+    if(!googleSheetKey) {
+        if(onError){
+            onError()
+        }
         return
     }
 
     GM_xmlhttpRequest({
         method: "GET",
-        url: "https://sheetdb.io/api/v1/" + getSheetDbKey(),
+        url: `https://docs.google.com/spreadsheets/d/${googleSheetKey}/htmlview`,
         onload: function (result) {
-            console.log("getSyncTgValues")
-            console.log(result)
-            updateLastViewedFromDecodedExportData(decodeExportData(JSON.parse(result.response)[0].value))
+            console.log("loadMergeSyncTgValues")
+            if (result.status != 200) {
+                console.log(result)
+                if(onError){
+                    onError()
+                }
+                return
+            }
+            let exportData = result.response.match("<div class=\"softmerge-inner.+?>(.+?)<\\/div>")[1]
+            console.log(exportData)
+            mergeLastViewedFromDecodedExportData(decodeString(exportData))
+            if (then) {
+                then(exportData)
+            }
         }
     });
 }
 
-function setSyncTgValues() {
-    if(!getOrPromptSheetDbKey()) {
-        return
+function deleteDeletedDates() {
+    getSavedTgChannelsByKeyPostfixValues("_deleted_date_id").forEach(x => {
+        deleteTgState(getTgDeletedDateId(x[0]))
+    })
+}
+
+function loadMergeUploadSyncBtnTextResult(resultText) {
+    let btn = document.getElementById(BTN_LOAD_MERGE_UPLOAD_SYNC_ID)
+    btn.innerText = resultText
+    setTimeout(() => {
+        btn.innerText = BTN_LOAD_MERGE_UPLOAD_SYNC_INNER_TEXT
+        btn.removeAttribute("disabled")
+    }, 1000)
+}
+
+function loadMergeUploadSyncBtnTextSuccess() {
+    loadMergeUploadSyncBtnTextResult("✅")
+}
+
+function loadMergeUploadSyncBtnTextFail() {
+    loadMergeUploadSyncBtnTextResult("❌")
+}
+
+function cutOffAfterLast(str, separator) {
+    return str.slice(0, str.lastIndexOf(separator))
+}
+
+function channelStatesEquals(exportData1, exportData2){
+    return cutOffAfterLast(decodeString(exportData1), '|') === cutOffAfterLast(decodeString(exportData2), '|')
+}
+
+function loadMergeUploadSyncTgValues() {
+    let btn = document.getElementById(BTN_LOAD_MERGE_UPLOAD_SYNC_ID)
+    btn.setAttribute("disabled", true)
+    btn.innerText = "⌛"
+
+    loadMergeSyncTgValues(loadedExportData => {
+        if (channelStatesEquals(loadedExportData, getExportData())) {
+            console.log("already synced")
+            loadMergeUploadSyncBtnTextSuccess()
+            return
+        }
+
+        if(!getOrPromptSheetDbKey()) {
+            loadMergeUploadSyncBtnTextFail()
+            return
+        }
+
+        let exportData = getExportData()
+        console.log(JSON.stringify({value: exportData}))
+        GM_xmlhttpRequest({
+            method: "PATCH",
+            url: "https://sheetdb.io/api/v1/" + getSheetDbKey() + "/id/1",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            data: JSON.stringify({value: exportData}),
+            onload: function (result) {
+                console.log("loadMergeUploadSyncTgValues")
+                console.log(result)
+                if (result.status != 200){
+                    loadMergeUploadSyncBtnTextFail()
+                    return
+                }
+
+                loadMergeUploadSyncBtnTextSuccess()
+                deleteDeletedDates()
+            }
+        });
+    },
+    () => {
+        loadMergeUploadSyncBtnTextFail()
+    })
+}
+
+function addButtonControl(buttonsGroup, innerText, onclick, id) {
+    let buttonElement = document.createElement("button")
+    if (id) {
+        buttonElement.id = id
     }
-
-    let exportData = getExportData()
-    console.log(JSON.stringify({value: exportData}))
-    GM_xmlhttpRequest({
-        method: "PATCH",
-        url: "https://sheetdb.io/api/v1/" + getSheetDbKey() + "/id/1",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        data: JSON.stringify({value: exportData}),
-        onload: function (result) {
-            console.log("setSyncTgValues")
-            console.log(result)
-        }
-    });
-}
-
-function addButtonControl(buttonsGroup, innerText, onclick) {
-    let ButtonElement = document.createElement("button")
-    ButtonElement.innerText = innerText
-    ButtonElement.onclick = onclick
-    buttonsGroup.appendChild(ButtonElement)
+    buttonElement.innerText = innerText
+    buttonElement.onclick = onclick
+    buttonsGroup.appendChild(buttonElement)
 }
 
 function addButtonsControls() {
@@ -497,12 +637,11 @@ function addButtonsControls() {
     footerElement.prepend(buttonsGroup)
 
     addButtonControl(buttonsGroup, "🔄", updateUnreadedCountForAll)
-    addButtonControl(buttonsGroup, "⬇️🌎", getSyncTgValues)
-    addButtonControl(buttonsGroup, "⬆️🌎", setSyncTgValues)
+    addButtonControl(buttonsGroup, BTN_LOAD_MERGE_UPLOAD_SYNC_INNER_TEXT, loadMergeUploadSyncTgValues, BTN_LOAD_MERGE_UPLOAD_SYNC_ID)
     addButtonControl(buttonsGroup, "⬇️📋", async () => {
       let dataEncoded = await navigator.clipboard.readText();
-      let data = decodeExportData(dataEncoded)
-      updateLastViewedFromDecodedExportData(data)
+      let data = decodeString(dataEncoded)
+      mergeLastViewedFromDecodedExportData(data)
     })
     addButtonControl(buttonsGroup, "⬆️📋", async () => await navigator.clipboard.writeText(getExportData()))
 }
@@ -546,6 +685,8 @@ function onclickToggleSidebar() {
     setOnClickForAll()
     addTgControls()
     observeLoadMore()
-    getGmTgValues()
+    mergeGmTgValues()
+    loadMergeSyncTgValues()
     onclickToggleSidebar()
+    updateUnreadedCountForAll()
 })();
