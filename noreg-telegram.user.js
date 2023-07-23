@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         noregtg
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.8
 // @description  Track publick telegram channels without registration
 // @author       caneq
 // @match        https://t.me/s/*
@@ -133,8 +133,16 @@ function getSheetDbKey() {
     return GM_getValue("sheetDbKey")
 }
 
+function getSheetDbBearer() {
+    return GM_getValue("sheetDbBearer")
+}
+
 function setSheetDbKey(sheetDbKey) {
     GM_setValue("sheetDbKey", sheetDbKey)
+}
+
+function setSheetDbBearer(sheetDbBearer) {
+    GM_setValue("sheetDbBearer", sheetDbBearer)
 }
 
 function getGoogleSheetKey() {
@@ -530,6 +538,10 @@ function getOrPromptSheetDbKey() {
     return getOrPrompt(getSheetDbKey, setSheetDbKey, "SheetDb key")
 }
 
+function getOrPromptSheetDbBearer() {
+    return getOrPrompt(getSheetDbBearer, setSheetDbBearer, "SheetDb bearer")
+}
+
 function getOrPromptGoogleSheetKey() {
     return getOrPrompt(getGoogleSheetKey, setGoogleSheetKey, "Google sheet key")
 }
@@ -610,7 +622,7 @@ function loadMergeUploadSyncTgValues() {
             return
         }
 
-        if (!getOrPromptSheetDbKey()) {
+        if (!getOrPromptSheetDbKey() || !getOrPromptSheetDbBearer()) {
             loadMergeUploadSyncBtnTextFail()
             return
         }
@@ -621,7 +633,8 @@ function loadMergeUploadSyncTgValues() {
             method: "PATCH",
             url: "https://sheetdb.io/api/v1/" + getSheetDbKey() + "/id/1",
             headers: {
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${getSheetDbBearer()}`
             },
             data: JSON.stringify({ value: exportData }),
             onload: function (result) {
